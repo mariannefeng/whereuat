@@ -21,6 +21,7 @@ import (
 	//TODO: this is where you would tell other people what's YOUR listening port
 	//TODO: this would also tell other people what to call you
 //TODO: can we send protobuf over udp? if so, do it
+//TODO: cleanup main, this shit's a mess. Move stuff to app. separate files if necessary
 
 var port = "1119"
 
