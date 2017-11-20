@@ -9,6 +9,7 @@ import (
 	"fmt"
 )
 
+//TODO: SET MAX NUMBER OF BYTES PER MESSAGE TO BE 1119?
 //TODO: make it take in std.in (so we can write!)
 //TODO: add cache
 //TODO: ssl (this is a biggie)
