@@ -70,7 +70,8 @@ func receivePong(pongNum int, pongChan <-chan Pong, doneChan chan<- []Pong) {
 }
 
 func main() {
-	go letsListen()
+	quitCh := make(chan int)
+	go letsListen(quitCh)
 
 	var host = ""
 	addrs, err := net.Interfaces()
@@ -118,6 +119,8 @@ func main() {
 		checkUDP(alive.Ip)
 	}
 	pp.Println(alives)
+
+	<-quitCh
 }
 
 func checkUDP(addr string) {
@@ -137,7 +140,7 @@ func checkUDP(addr string) {
 
 }
 
-func letsListen() {
+func letsListen(quitCh chan int) {
 	addr := net.UDPAddr{
 		Port: 1119,
 		IP:   net.ParseIP("0.0.0.0"),
@@ -165,6 +168,8 @@ func letsListen() {
 	var testPayload = []byte("This is a test")
 
 	conn.Write(testPayload)
+
+	quitCh <- 1
 }
 
 func letsTalk(conn net.Conn, p []byte) {
