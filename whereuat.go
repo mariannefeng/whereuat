@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"fmt"
-	"bufio"
 )
 
 var port = "1119"
@@ -27,6 +26,7 @@ func Hosts(cidr string) ([]string, error) {
 }
 
 //  http://play.golang.org/p/m8TNTtygK0
+//TODO: obviously there's a way to optimize (also once we add cache really won't be that bad)
 func inc(ip net.IP) {
 	for j := len(ip) - 1; j >= 0; j-- {
 		ip[j]++
@@ -44,6 +44,9 @@ type Pong struct {
 func ping(pingChan <-chan string, pongChan chan<- Pong) {
 	for ip := range pingChan {
 		_, err := exec.Command("ping", "-c1", "-t1", ip).Output()
+		//if ip == "192.168.1.12" {
+		//	fmt.Println(string(pingOutput))
+		//}
 		var alive bool
 		if err != nil {
 			alive = false
@@ -58,7 +61,7 @@ func receivePong(pongNum int, pongChan <-chan Pong, doneChan chan<- []Pong) {
 	var alives []Pong
 	for i := 0; i < pongNum; i++ {
 		pong := <-pongChan
-		//  fmt.Println("received:", pong)
+		//fmt.Println("received:", pong)
 		if pong.Alive {
 			alives = append(alives, pong)
 		}
@@ -122,16 +125,21 @@ func checkUDP(addr string) {
 	p :=  make([]byte, 2048)
 
 	conn, err := net.Dial("udp", otherAddr)
+
 	if err != nil {
 		fmt.Printf("Some error %v", err)
 		return
 	}
-	fmt.Fprintf(conn, "Hi UDP Server, How are you doing?")
-	_, err = bufio.NewReader(conn).Read(p)
-	if err == nil {
-		fmt.Printf("%s\n", p)
-	} else {
-		fmt.Printf("Some error %v\n", err)
+	fmt.Fprintf(conn, "haygurl")
+
+	for {
+		_, err = conn.Read(p)
+		if err == nil {
+			fmt.Printf("%s\n", p)
+		} else {
+			fmt.Printf("Some error %v\n", err)
+			break
+		}
 	}
 	conn.Close()
 }
