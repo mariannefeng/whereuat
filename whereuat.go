@@ -9,6 +9,19 @@ import (
 	"fmt"
 )
 
+//TODO: make it take in std.in (so we can write!)
+//TODO: add cache
+//TODO: ssl (this is a biggie)
+//TODO: send protobuf so we can give ourselves names
+//TODO: terminal coloring
+//TODO: add support for different operating systems (not just mac)
+//TODO: figure out why the fuck finding each other doesn't always work
+//TODO: obviously there's a way to optimize (also once we add cache really won't be that bad)
+//TODO: figure out connect protocol:
+	//TODO: this is where you would tell other people what's YOUR listening port
+	//TODO: this would also tell other people what to call you
+//TODO: can we send protobuf over udp? if so, do it
+
 var port = "1119"
 
 func Hosts(cidr string) ([]string, error) {
@@ -26,7 +39,6 @@ func Hosts(cidr string) ([]string, error) {
 }
 
 //  http://play.golang.org/p/m8TNTtygK0
-//TODO: obviously there's a way to optimize (also once we add cache really won't be that bad)
 func inc(ip net.IP) {
 	for j := len(ip) - 1; j >= 0; j-- {
 		ip[j]++
