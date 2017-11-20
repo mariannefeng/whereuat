@@ -6,6 +6,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"fmt"
+	"bufio"
 )
 
 var port = "1119"
@@ -108,24 +110,28 @@ func main() {
 
 	alives := <-doneChan
 	for _, alive := range alives {
-		log.Println("IS ALIVE")
 		checkUDP(alive.Ip)
 	}
 	pp.Println(alives)
 }
 
 func checkUDP(addr string) {
-	var status string
-	otherAddr :=  addr+":"+port
+	//var status string
+	otherAddr :=  addr + ":" + port
 	log.Println(otherAddr)
-	udpAddr, err := net.ResolveUDPAddr("udp", otherAddr)
-	conn, err := net.DialUDP("udp",udpAddr, udpAddr)
+	p :=  make([]byte, 2048)
+
+	conn, err := net.Dial("udp", otherAddr)
 	if err != nil {
-		log.Println("Connection error:", err)
-		status = "Unreachable"
-	} else {
-		status = "Online"
-		defer conn.Close()
+		fmt.Printf("Some error %v", err)
+		return
 	}
-	log.Println(status)
+	fmt.Fprintf(conn, "Hi UDP Server, How are you doing?")
+	_, err = bufio.NewReader(conn).Read(p)
+	if err == nil {
+		fmt.Printf("%s\n", p)
+	} else {
+		fmt.Printf("Some error %v\n", err)
+	}
+	conn.Close()
 }
