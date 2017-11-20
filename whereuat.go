@@ -1,12 +1,14 @@
 package main
 
 import (
-	"github.com/k0kubun/pp"
 	"log"
 	"net"
 	"os"
-	"os/exec"
 	"fmt"
+	"bufio"
+	"bytes"
+	"strings"
+	"github.com/mariannefeng/whereuat/util"
 )
 
 //TODO: SET MAX NUMBER OF BYTES PER MESSAGE TO BE 1119?
@@ -25,114 +27,34 @@ import (
 //TODO: cleanup main, this shit's a mess. Move stuff to app. separate files if necessary
 
 var port = "1119"
+var others []string
 
-func Hosts(cidr string) ([]string, error) {
-	ip, ipnet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return nil, err
-	}
+var maxbytes = 1119
+//TODO: this needs to be different for different operating systems
+var whereuat = "/Users/mariannefeng/.whereuat"
 
-	var ips []string
-	for ip := ip.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
-		ips = append(ips, ip.String())
-	}
-	// remove network address and broadcast address
-	return ips[1 : len(ips)-1], nil
-}
-
-//  http://play.golang.org/p/m8TNTtygK0
-func inc(ip net.IP) {
-	for j := len(ip) - 1; j >= 0; j-- {
-		ip[j]++
-		if ip[j] > 0 {
-			break
-		}
-	}
-}
-
-type Pong struct {
-	Ip    string
-	Alive bool
-}
-
-func ping(pingChan <-chan string, pongChan chan<- Pong) {
-	for ip := range pingChan {
-		_, err := exec.Command("ping", "-c1", "-t1", ip).Output()
-		//if ip == "192.168.1.12" {
-		//	fmt.Println(string(pingOutput))
-		//}
-		var alive bool
-		if err != nil {
-			alive = false
-		} else {
-			alive = true
-		}
-		pongChan <- Pong{Ip: ip, Alive: alive}
-	}
-}
-
-func receivePong(pongNum int, pongChan <-chan Pong, doneChan chan<- []Pong) {
-	var alives []Pong
-	for i := 0; i < pongNum; i++ {
-		pong := <-pongChan
-		//fmt.Println("received:", pong)
-		if pong.Alive {
-			alives = append(alives, pong)
-		}
-	}
-	doneChan <- alives
-}
 
 func main() {
 	quitCh := make(chan int)
 	go letsListen(quitCh)
 
-	var host = ""
-	addrs, err := net.Interfaces()
-	if err != nil {
-		os.Stderr.WriteString("Oops: " + err.Error() + "\n")
-		os.Exit(1)
-	}
+	checkForOthers()
 
-	for _, a := range addrs {
-		//TODO: change this to use different values for different operating systems
-		if a.Name == "en0" {
-			addrList, err := a.Addrs()
+	if len(others) == 0 {
+		alives := util.FindOthers()
+		for _, alive := range alives {
+			checkUDP(alive)
+		}
+	} else {
+		for _, other := range others {
+			p :=  make([]byte, maxbytes)
+			conn, err := net.Dial("udp", other)
 			if err != nil {
-				os.Stderr.WriteString("Oops: " + err.Error() + "\n")
-				os.Exit(1)
+				return
 			}
-			for _, addr := range addrList {
-				if ipnet, ok := addr.(*net.IPNet); ok && ipnet.IP.To4() != nil {
-					host = addr.String()
-				}
-
-			}
+			go letsTalk(conn, other, p)
 		}
 	}
-
-	hosts, _ := Hosts(host)
-	concurrentMax := 100
-	pingChan := make(chan string, concurrentMax)
-	pongChan := make(chan Pong, len(hosts))
-	doneChan := make(chan []Pong)
-
-	for i := 0; i < concurrentMax; i++ {
-		go ping(pingChan, pongChan)
-	}
-
-	go receivePong(len(hosts), pongChan, doneChan)
-
-	for _, ip := range hosts {
-		pingChan <- ip
-		//  fmt.Println("sent: " + ip)
-	}
-
-	alives := <-doneChan
-	for _, alive := range alives {
-		checkUDP(alive.Ip)
-	}
-	pp.Println(alives)
 
 	<-quitCh
 }
@@ -140,17 +62,17 @@ func main() {
 func checkUDP(addr string) {
 	//var status string
 	otherAddr :=  addr + ":" + port
-	log.Println(otherAddr)
-	p :=  make([]byte, 2048)
+	p :=  make([]byte, maxbytes)
 
 	conn, err := net.Dial("udp", otherAddr)
 
 	if err != nil {
-		fmt.Printf("Some error %v", err)
+		//fmt.Printf("Some error %v", err)
 		return
 	}
 
-	go letsTalk(conn, p)
+	//opens connection
+	go letsTalk(conn, otherAddr, p)
 
 }
 
@@ -185,14 +107,16 @@ func letsListen(quitCh chan int) {
 
 	quitCh <- 1
 }
-
-func letsTalk(conn net.Conn, p []byte) {
+ 
+//client reads from connection
+func letsTalk(conn net.Conn, addr string, p []byte) {
 	fmt.Fprintf(conn, "haygurl")
 
 	for {
 		_, err := conn.Read(p)
 		if err == nil {
 			fmt.Printf("%s\n", p)
+			writeToFile(addr)
 		} else {
 			fmt.Printf("Some error %v\n", err)
 			break
@@ -200,6 +124,82 @@ func letsTalk(conn net.Conn, p []byte) {
 	}
 
 	conn.Close()
+}
+
+func checkForOthers() {
+	var f = &os.File{}
+	if _, err := os.Stat(whereuat); !os.IsNotExist(err) {
+		log.Println("file already exists")
+		f, err = os.Open(whereuat)
+		if err == os.ErrNotExist {
+			fmt.Printf("%s not found\n", whereuat)
+			return
+		} else if err != nil {
+			fmt.Printf("%s, %v\n", whereuat, err)
+			return
+		}
+	} else {
+		_, err := os.Create(whereuat)
+		if err != nil {
+			return
+		}
+	}
+
+	defer f.Close()
+
+	buf := new(bytes.Buffer)
+	_, err := buf.ReadFrom(f)
+	if err != nil {
+		return
+	}
+
+	ipaddrs := strings.Split(buf.String(), " ")
+	for _, ip := range ipaddrs {
+		if len(strings.TrimSpace(ip)) > 0 {
+			others = append(others, ip)
+			log.Println("appended " + ip + " to others")
+		}
+	}
+}
+
+func writeToFile(addr string) {
+	log.Println("inside of write to file: " + addr)
+
+	var f = &os.File{}
+	var err = error(nil)
+	//if file exists we append
+	if _, err = os.Stat(whereuat); !os.IsNotExist(err) {
+		log.Println("file already exists")
+		f, err = os.OpenFile(whereuat, os.O_APPEND|os.O_RDWR, 0666)
+		if err == os.ErrNotExist {
+			fmt.Printf("%s not found\n", whereuat)
+		} else if err != nil {
+			fmt.Printf("%s, %v\n", whereuat, err)
+		}
+	}
+
+	defer f.Close()
+
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(f)
+	ipaddrs := strings.Split(buf.String(), " ")
+
+	saved := false
+	for _, ip := range ipaddrs {
+		if ip == addr {
+			saved = true
+		}
+	}
+
+	if !saved {
+		log.Println("gonna go ahead and append to file")
+		w := bufio.NewWriter(f)
+		fmt.Fprint(w, addr + " ")
+		err = w.Flush() // Don't forget to flush!
+		if err != nil {
+			log.Fatal("fatal error: ", err)
+		}
+	}
 }
 
 
