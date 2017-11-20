@@ -130,10 +130,16 @@ func checkUDP(addr string) {
 		fmt.Printf("Some error %v", err)
 		return
 	}
+
+	go letsTalk(conn, p)
+
+}
+
+func letsTalk(conn net.Conn, p []byte) {
 	fmt.Fprintf(conn, "haygurl")
 
 	for {
-		_, err = conn.Read(p)
+		_, err := conn.Read(p)
 		if err == nil {
 			fmt.Printf("%s\n", p)
 		} else {
